@@ -34,6 +34,7 @@ start_hadoop_cluster_and_prepare_flink
 
 # copy test files
 docker cp "${FLINK_PYTHON_DIR}/dev/lint-python.sh" master:/tmp/
+docker cp "${FLINK_PYTHON_DIR}/dev/dev-requirements.txt" master:/tmp/
 docker cp "${FLINK_PYTHON_TEST_DIR}/target/PythonUdfSqlJobExample.jar" master:/tmp/
 docker cp "${FLINK_PYTHON_TEST_DIR}/python/add_one.py" master:/tmp/
 docker cp "${REQUIREMENTS_PATH}" master:/tmp/
@@ -47,6 +48,7 @@ docker cp "${FLINK_PYTHON_DIR}/apache-flink-libraries/dist/${PYFLINK_LIBRARIES_P
 docker exec master bash -c "
 /tmp/lint-python.sh -s miniconda
 source /tmp/.conda/bin/activate
+pip install -r /tmp/dev-requirements.txt
 pip install /tmp/${PYFLINK_LIBRARIES_PACKAGE_FILE}
 pip install /tmp/${PYFLINK_PACKAGE_FILE}
 conda install -y -q zip=3.0
@@ -57,7 +59,9 @@ zip -q -r /tmp/venv.zip .conda
 
 docker exec master bash -c "export HADOOP_CLASSPATH=\`hadoop classpath\` && \
     export PYFLINK_CLIENT_EXECUTABLE=/tmp/.conda/bin/python && \
-    /home/hadoop-user/$FLINK_DIRNAME/bin/flink run -m yarn-cluster -ytm 1500 -yjm 1000 \
+    /home/hadoop-user/$FLINK_DIRNAME/bin/flink run -t yarn-application \
+    -Djobmanager.memory.process.size=1500m \
+    -Dtaskmanager.memory.process.size=1000m \
     -pyfs /tmp/add_one.py \
     -pyreq /tmp/requirements.txt \
     -pyarch /tmp/venv.zip \
@@ -66,10 +70,18 @@ docker exec master bash -c "export HADOOP_CLASSPATH=\`hadoop classpath\` && \
 
 docker exec master bash -c "export HADOOP_CLASSPATH=\`hadoop classpath\` && \
     export PYFLINK_CLIENT_EXECUTABLE=/tmp/.conda/bin/python && \
-    /home/hadoop-user/$FLINK_DIRNAME/bin/flink run -m yarn-cluster -ytm 1500 -yjm 1000 \
+    /home/hadoop-user/$FLINK_DIRNAME/bin/flink run -t yarn-application \
+    -Djobmanager.memory.process.size=1500m \
+    -Dtaskmanager.memory.process.size=1000m \
     -pyfs /tmp/add_one.py \
     -pyreq /tmp/requirements.txt \
     -pyarch /tmp/venv.zip \
     -pyexec venv.zip/.conda/bin/python \
     -py /tmp/python_job.py \
     pipeline.jars file:/tmp/PythonUdfSqlJobExample.jar"
+
+# clean up python env
+"${FLINK_PYTHON_DIR}/dev/lint-python.sh" -r
+
+# clean up apache-flink-libraries
+rm -rf "${FLINK_PYTHON_DIR}/apache-flink-libraries/dist/${PYFLINK_LIBRARIES_PACKAGE_FILE}"
